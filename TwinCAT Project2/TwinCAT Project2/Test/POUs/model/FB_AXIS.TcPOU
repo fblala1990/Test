@@ -1,0 +1,565 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.2">
+  <POU Name="FB_AXIS" Id="{1d03cbbe-bca3-47fb-a1a6-41d5f0b934d0}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_AXIS
+VAR_INPUT
+	
+	AxisId			:STRING(10);
+	iMode			:INT;
+//CMD
+	bMoveOk			:BOOL;
+	bPowerCmd		:BOOL;
+	bResetCmd		:BOOL;
+	bJogPCmd		:BOOL;
+	bJogNCmd		:BOOL;
+	bMovPosCmd		:BOOL;	
+	bStopCmd		:BOOL;
+	bHomeCmd		:BOOL;	
+	bMoveVelPCmd	:BOOL;
+	bMoveVelNCmd	:BOOL;	
+//para          	
+	JogVel			:LREAL;
+	JogDis			:LREAL;
+	JogAcc			:LREAL;
+	JogDec			:LREAL;
+	MovVel			:LREAL;
+	TargetPos		:LREAL;
+	MovAcc			:LREAL;
+	MovDec			:LREAL;
+//pospara
+	rForewardPos	:REAL;	
+	rHomeVel1		:INT:=10;
+	rHomeVel2		:INT:=5;
+	rHomeBackDis	:INT;	
+	rHomeOffset		:INT;
+//signal
+	bHomeSignal		:BOOL;		//原点位
+	bForewardSignal	:BOOL;		//进到位
+	bBackwardSignal	:BOOL;		//退到位
+	bBackLimit		:BOOL;		//后限位
+	bForeLimit		:BOOL;		//前限位
+END_VAR
+VAR_OUTPUT
+	bHomed			:BOOL;		//轴初始化完成
+	bEnable			:BOOL;		//轴使能成功
+	bMoving			:BOOL;		//轴运动中
+	bBusy			:BOOL;		//busy时不能接收新的运动指令，只能先stop
+	ActPos			:LREAL;		//编码器位置
+	ActSpeed		:LREAL;
+	ActTorque		:LREAL;
+	
+	bPowerDone		:BOOL;		
+	bPowerError		:BOOL;	
+	bJogDone		:BOOL;
+	bJogError		:BOOL;	
+	bMovDone		:BOOL;
+	bMovError		:BOOL;	
+	bResetDone		:BOOL;
+	bResetError		:BOOL;
+	bStopDone		:BOOL;
+	bStopError		:BOOL;
+	bVelReached		:BOOL;
+	bMoveVelError	:BOOL;
+	
+	bErr			:ARRAY[1..20] OF BOOL;
+	//1:负极限不能反向点动			2：正极限不能正向点动
+	//3：轴未初始化，不能运动		4：不满足运动条件，有碰撞风险
+	//5：编码器位置和开关不一致		6：轴使能消失
+	//7：轴扭矩超过设置值			8:到极限不能运动
+	//:
+	
+	bAtHomePos		:BOOL;
+	bAtForeWardPos	:BOOL;
+	
+END_VAR
+VAR
+	Axis			: axis_ref;
+	Power			: Tc2_MC2.MC_Power ;
+	JOGH			: Tc2_MC2.MC_MoveRelative;
+	JOG				: Tc2_MC2.MC_MoveRelative;
+	MoveA			: Tc2_MC2.MC_MoveAbsolute;
+	MoveVH			: Tc2_MC2.MC_MoveVelocity;	//Homing movv
+	MoveV			: Tc2_MC2.MC_MoveVelocity;
+	Reset			: Tc2_MC2.MC_Reset;
+	Stop			: Tc2_MC2.MC_Stop;
+	StopLimit		: Tc2_MC2.MC_Stop;
+	SetPos			: Tc2_MC2.MC_SetPosition;	
+	WritePara		: MC_WriteParameter;
+	Update			: MC_ReadStatus ;
+	tErr			: ARRAY[1..20] OF TON;
+	
+//home
+	rHome			: Tc2_Standard.R_TRIG;
+	Home_Done		:BOOL;
+	Home_Error		:BOOL;
+	HomeState		:INT;
+	Home_bError		:ARRAY[0..10] OF BOOL;
+	Home_bDone		:ARRAY[0..10] OF BOOL;
+	tHomeStep		:ARRAY[0..10] OF Ton;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="M_Home" Id="{919a2c23-9634-44c8-b1c4-7003c5269afa}">
+      <Declaration><![CDATA[METHOD M_Home : BOOL
+VAR
+	iLoop		:INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[//初始化过程的变量初始化
+	rHome(CLK:=bHomeCmd  , Q=> );
+	IF rHome.Q THEN
+		bHomed :=FALSE;
+		Home_Done:=FALSE;
+		Home_Error:=FALSE;
+		HomeState:=0;		
+		FOR iLoop:=0 TO 10 DO
+			Home_bError[iLoop]:=FALSE;
+			Home_bDone[iLoop]:=FALSE;
+		END_FOR
+		SetPos(	Axis:=Axis ,Execute:=FALSE);
+		MoveVH(Axis:= Axis ,Execute:= FALSE);
+		STOP(Axis :=Axis ,Execute :=FALSE );
+		JOGH(Axis :=Axis ,Execute :=FALSE );
+	END_IF
+
+//初始化过程
+	IF bHomeCmd THEN		
+		CASE HomeState OF
+			0:			
+				HomeState:=1;								
+			1:
+				IF NOT bHomeSignal THEN					
+					MoveVH(Axis:=Axis ,Execute:= TRUE, Velocity:=rHomeVel1 ,Acceleration:=rHomeVel1*5,
+					Direction:=MC_Negative_Direction , Error=> Home_bError[0] );
+				ELSE
+					MoveVH(Axis:= Axis ,Execute:= FALSE);					
+					STOP(Axis :=Axis ,Execute :=TRUE, Deceleration:=rHomeVel1*10,Done=>Home_bDone[1]);
+					IF Home_bDone[1] THEN
+						STOP(Axis :=Axis ,Execute :=FALSE);												
+						HomeState:=2;												
+					END_IF					
+				END_IF
+			2:				
+				IF bHomeSignal THEN				
+					MoveVH(Axis:=Axis ,Execute:= TRUE, Velocity:=rHomeVel2 ,Direction:=MC_Positive_Direction);									
+				ELSE
+					MoveVH(Axis:=Axis ,Execute:= FALSE);	
+					STOP(Axis :=Axis ,Execute :=TRUE,Deceleration:=rHomeVel2*15, Done=>Home_bDone[2]);						
+					IF Home_bDone[2] THEN						
+						STOP(Axis :=Axis ,Execute :=FALSE);											
+						HomeState:=3;																							
+					END_IF						
+				END_IF
+			3:					
+				JOGH(Axis:=Axis, Execute:= TRUE, Distance:=rHomeBackDis,Velocity:=1 , Done=> Home_bDone[3]);
+				IF Home_bDone[3] THEN
+					Home_bDone[4]:=TRUE;
+				END_IF
+				IF Home_bDone[4] THEN					
+					JOGH(Axis:=Axis ,Execute:= FALSE);	
+					STOP(Axis :=Axis ,Execute :=TRUE,Deceleration:=20, Done=>Home_bDone[5]);
+					IF Home_bDone[5] THEN
+						HomeState:=4;
+					END_IF					
+				END_IF	
+			4:
+				SetPos(	Axis:=Axis,Execute:= TRUE,Position:=80,Mode:=FALSE , Done=>Home_bDone[6]);				
+				IF Home_bDone[6] THEN
+					SetPos(Axis:=Axis,Execute:= FALSE);
+					HomeState:=0;												
+					bHomed :=TRUE;
+					bHomeCmd := FALSE;							
+					bResetCmd :=TRUE ;
+				END_IF				
+		END_CASE		
+	END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Home1" Id="{9d860236-6ccd-4f89-8e11-59dee8944ee6}">
+      <Declaration><![CDATA[METHOD M_Home1 : BOOL
+VAR
+	iLoop	:INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[//初始化过程的变量初始化
+	rHome(CLK:=bHomeCmd  , Q=> );
+	IF rHome.Q THEN
+		bHomed :=FALSE;
+		Home_Done:=FALSE;
+		Home_Error:=FALSE;
+		HomeState:=0;		
+		FOR iLoop:=0 TO 10 DO
+			Home_bError[iLoop]:=FALSE;
+			Home_bDone[iLoop]:=FALSE;
+			tHomeStep[iLoop](IN:=FALSE , PT:= , Q=> , ET=> );
+		END_FOR
+		SetPos(	Axis:=Axis ,Execute:=FALSE);
+		MoveVH(Axis:= Axis ,Execute:= FALSE);
+		STOP(Axis :=Axis ,Execute :=FALSE );
+		JOGH(Axis :=Axis ,Execute :=FALSE );
+	END_IF
+
+//初始化过程
+	IF bHomeCmd THEN		
+		CASE HomeState OF
+			0:			
+				HomeState:=1;								
+			1:
+				IF NOT bHomeSignal AND NOT bBackwardSignal THEN					
+					MoveVH(Axis:=Axis ,Execute:= TRUE, Velocity:=rHomeVel1 ,Acceleration:=rHomeVel1*5,
+					Direction:=MC_Negative_Direction , Error=> Home_bError[0] );
+				ELSE
+					MoveVH(Axis:= Axis ,Execute:= FALSE);					
+					STOP(Axis :=Axis ,Execute :=TRUE, Deceleration:=rHomeVel1*20,Done=>Home_bDone[1]);
+					IF Home_bDone[1] THEN
+						STOP(Axis :=Axis ,Execute :=FALSE);	
+						IF bHomeSignal THEN										
+							HomeState:=3;	
+						ELSIF bBackwardSignal THEN
+							HomeState:=2;
+							Home_bDone[1]:=FALSE;
+						END_IF 										
+					END_IF					
+				END_IF
+			2:
+				JOGH(Axis:=Axis, Execute:= TRUE, Distance:=rHomeOffset+10,Velocity:=rHomeVel1 , Done=> Home_bDone[2]);
+				IF Home_bDone[2] THEN
+					Home_bDone[3]:=TRUE;
+				END_IF
+				IF Home_bDone[3] THEN					
+					JOGH(Axis:=Axis ,Execute:= FALSE);	
+					//STOP(Axis :=Axis ,Execute :=TRUE,Deceleration:=20, Done=>Home_bDone[4]);
+					Home_bDone[4]:=TRUE;
+					IF Home_bDone[4] THEN
+						HomeState:=1;
+						STOP(Axis :=Axis ,Execute :=FALSE);	
+					END_IF					
+				END_IF					
+			3:				
+				IF bHomeSignal THEN				
+					MoveVH(Axis:=Axis ,Execute:= TRUE, Velocity:=rHomeVel2 ,Direction:=MC_Positive_Direction);									
+				ELSE
+					MoveVH(Axis:=Axis ,Execute:= FALSE);	
+					STOP(Axis :=Axis ,Execute :=TRUE,Deceleration:=rHomeVel2*25, Done=>Home_bDone[5]);						
+					IF Home_bDone[5] THEN						
+						STOP(Axis :=Axis ,Execute :=FALSE);							
+						HomeState:=4;																																		
+					END_IF						
+				END_IF
+			4:					
+				JOGH(Axis:=Axis, Execute:= TRUE, Distance:=rHomeBackDis,Velocity:=1 , Done=>Home_bDone[6]);
+				IF Home_bDone[6] THEN
+					Home_bDone[7]:=TRUE;
+				END_IF
+				IF Home_bDone[7] THEN					
+					JOGH(Axis:=Axis ,Execute:= FALSE);	
+					//STOP(Axis :=Axis ,Execute :=TRUE,Deceleration:=20, Done=>Home_bDone[8]);
+					
+					//IF Home_bDone[8] THEN
+					HomeState:=5;
+					//END_IF					
+				END_IF	
+			5:
+				SetPos(	Axis:=Axis,Execute:= TRUE,Position:=rHomeOffset,Mode:=FALSE , Done=>Home_bDone[9]);				
+				IF Home_bDone[9] THEN
+					SetPos(Axis:=Axis,Execute:= FALSE);
+					HomeState:=0;												
+					bHomed :=TRUE;
+					bHomeCmd := FALSE;							
+					bResetCmd :=TRUE ;
+				END_IF				
+		END_CASE		
+	END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Init" Id="{e803f768-07dc-4c01-96f5-c2ced48be641}">
+      <Declaration><![CDATA[METHOD M_Init : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_MovDis" Id="{742bd71d-0682-4e0a-8ebe-98c2a7ab88ba}">
+      <Declaration><![CDATA[METHOD M_MovDis : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF bJogPCmd THEN
+	JOG(Axis:=Axis ,Execute:= TRUE,	Distance:=JogDis , 
+	Velocity:=JogVel , Acceleration:=JogAcc ,Deceleration:=JogDec , 	
+	Done=> bJogDone, Error=>bJogError );
+	IF bJogDone OR bJogError THEN
+		bJogPCmd:=FALSE;		
+		JOG(Axis:=Axis ,Execute:= FALSE);
+	END_IF
+	IF bForeLimit THEN
+		bErr[2]:=TRUE;
+		bJogNCmd:=FALSE;
+		StopLimit(Axis:=Axis ,Execute:=TRUE,Deceleration:=JogVel*20);		
+		JOG(Axis:=Axis ,Execute:= FALSE);
+	END_IF
+ELSIF bJogNCmd THEN
+	JOG(Axis:=Axis ,Execute:= TRUE,	Distance:=0-JogDis , 
+	Velocity:=JogVel , Acceleration:=JogAcc ,Deceleration:=JogDec , 	
+	Done=> bJogDone, Error=>bJogError );
+	IF bJogDone OR bJogError THEN
+		bJogNCmd:=FALSE;		
+		JOG(Axis:=Axis ,Execute:= FALSE);
+	END_IF	
+	IF bBackLimit THEN
+		bErr[1]:=TRUE;
+		bJogPCmd:=FALSE;
+		StopLimit(Axis:=Axis ,Execute:=TRUE,Deceleration:=JogVel*20);		
+		JOG(Axis:=Axis ,Execute:= FALSE);
+	END_IF
+ELSE
+	JOG(Axis:=Axis ,Execute:= FALSE);
+END_IF
+IF bBackLimit OR bForeLimit THEN
+	StopLimit(Axis:=Axis ,Execute:=FALSE);	
+END_IF
+
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_MoveVel" Id="{ad421eca-fed6-46cb-a9dd-e4d40ecab9b2}">
+      <Declaration><![CDATA[METHOD M_MoveVel : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF bMoveVelPCmd THEN
+	MoveV(Axis:=Axis ,Execute:= TRUE, Velocity:= MovVel, 
+	Acceleration:=MovAcc , 	Deceleration:=MovDec , 	Direction:= Tc2_MC2.MC_Positive_Direction,	 
+	InVelocity=>bVelReached, 	Busy=> , 	Active=> , 	CommandAborted=> , 	Error=>bMoveVelError, 	ErrorID=> );
+	IF bMoveVelError THEN
+		MoveV(Axis:=Axis ,Execute:= FALSE);
+	END_IF
+	bMoveVelPCmd:=FALSE;
+ELSIF bMoveVelNCmd THEN
+	MoveV(Axis:=Axis ,Execute:= TRUE, Velocity:= MovVel, 
+	Acceleration:=MovAcc , 	Deceleration:=MovDec , 	Direction:= Tc2_MC2.MC_Positive_Direction,	 
+	InVelocity=>bVelReached, 	Busy=> , 	Active=> , 	CommandAborted=> , 	Error=>bMoveVelError, 	ErrorID=> );
+	IF bMoveVelError THEN
+		MoveV(Axis:=Axis ,Execute:= FALSE);
+	END_IF
+ELSE
+	MoveV(Axis:=Axis ,Execute:= FALSE);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_MovPos" Id="{04b2744d-dc69-44ae-ab22-721e46f38a15}">
+      <Declaration><![CDATA[METHOD M_MovPos : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF bMovPosCmd THEN
+	MoveA(Axis:=Axis ,Execute:=TRUE , Position:=TargetPos , 
+	Velocity:=MovVel, Acceleration:=MovAcc , Deceleration:=MovDec ,	
+	Done=>bMovDone ,Error=>bMovError);
+	IF bMovDone OR bMovError THEN
+		//MoveA(Axis:=Axis ,Execute:=FALSE);
+		//bMovCmd:=FALSE;
+	END_IF
+ELSE
+	MoveA(Axis:=Axis ,Execute:=FALSE);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Power" Id="{824c8973-5a18-4295-a7fb-7398ab94d9a4}">
+      <Declaration><![CDATA[METHOD M_Power : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[Power(	Axis:=Axis ,
+		Enable:=bPowerCmd , 
+		Enable_Positive:=TRUE ,
+		Enable_Negative:=TRUE ,
+		Override:=100 ,
+		Error=>bPowerError);]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Process" Id="{1ed4e671-ecea-4250-9489-0dbcd79a0817}">
+      <Declaration><![CDATA[METHOD M_Process : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Reset" Id="{af01043a-88d4-46ff-872b-9ec4dcba6b48}">
+      <Declaration><![CDATA[METHOD M_Reset : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF bResetCmd THEN
+	Reset(Axis:= Axis, Execute:= TRUE, 
+	Done=>bResetDone ,Error=> bResetError );
+	IF bResetDone OR bResetError THEN
+		bResetCmd:=FALSE;
+		Reset(Axis:= Axis, Execute:=FALSE);
+	END_IF
+	
+	bPowerError	:=FALSE;	
+	bJogError	:=FALSE;	
+	bMovError	:=FALSE;	
+	bResetError	:=FALSE;
+	bStopError	:=FALSE;
+ELSE
+	Reset(Axis:= Axis, Execute:=FALSE);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Run" Id="{e80d09d7-520a-470c-92b2-4614da351810}">
+      <Declaration><![CDATA[METHOD M_Run : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[M_Update();
+M_Power();
+M_Reset();
+M_Stop();
+M_MovPos();
+M_MovDis();
+M_MoveVel();
+M_Home1();
+
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Stop" Id="{80cb39d0-35e0-45ac-86d1-529098e79562}">
+      <Declaration><![CDATA[METHOD M_Stop : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF bStopCmd THEN
+	bJogPCmd:=FALSE;
+	bJogNCmd:=FALSE;
+	bMovPosCmd	:=FALSE;
+	bHomeCmd:=FALSE;
+	Stop(Axis:= Axis, Execute:= TRUE, Deceleration:= MovDec*10, 
+	Done=>bStopDone ,Error=> bStopError );
+	
+	IF bStopDone OR bStopError THEN
+		bStopCmd:=FALSE;
+		Stop(Axis:= Axis, Execute:=FALSE);
+	END_IF
+ELSE
+	Stop(Axis:= Axis, Execute:=FALSE);
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Update" Id="{9008a506-be9f-448f-98f8-c9db3b8591d5}">
+      <Declaration><![CDATA[METHOD M_Update : BOOL
+VAR
+	iLoop		:INT;	
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[//到达极限则复位点动指令，并报错
+IF bBackLimit AND bJogNCmd THEN	
+	bErr[1]:=TRUE;
+	{text'负极限不能负向点动'}
+END_IF
+IF bforeLimit AND bJogPCmd THEN	
+	bErr[2]:=TRUE;
+	{text'正极限不能正向点动'}
+END_IF
+//点动错误自动复位
+FOR iLoop:=1 TO 2 DO
+	tErr[iLoop](IN:=bErr[iLoop] , PT:=T#10S);
+	IF tErr[iLoop].Q THEN
+		bErr[iLoop]:=FALSE;
+	END_IF
+END_FOR
+
+//到极限不能运动
+IF bBackLimit OR bforeLimit THEN
+	IF bMovPosCmd THEN
+		bMovPosCmd:=FALSE;
+		bErr[8]:=TRUE;
+	END_IF	
+END_IF
+
+//未初始化不能运动
+IF NOT bHomed THEN
+	IF bMovPosCmd THEN
+		bMovPosCmd:=FALSE;
+		bErr[3]:=TRUE;
+	END_IF
+END_IF
+
+//状态更新
+Update(Axis:=Axis ,Enable:=TRUE);
+ActPos:=Axis.NcToPlc.ActPos;
+ActSpeed:=Axis.NcToPlc.ActVelo;
+ActTorque:=Axis.NcToPlc.ActTorque;
+bEnable:=Axis.NcToPlc.StateDWord.20;
+bBusy:=bJogNCmd OR bJogPCmd OR bMovPosCmd OR bMoveVelPCmd OR bMoveVelNCmd OR bHomeCmd;
+bMoving:=Update.Status.Moving;]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="FB_AXIS">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_Home">
+      <LineId Id="3" Count="66" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_Home1">
+      <LineId Id="3" Count="87" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_Init">
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_MovDis">
+      <LineId Id="3" Count="34" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_MoveVel">
+      <LineId Id="3" Count="16" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_MovPos">
+      <LineId Id="3" Count="9" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_Power">
+      <LineId Id="3" Count="4" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_Process">
+      <LineId Id="5" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_Reset">
+      <LineId Id="3" Count="14" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_Run">
+      <LineId Id="3" Count="8" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_Stop">
+      <LineId Id="3" Count="13" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_AXIS.M_Update">
+      <LineId Id="3" Count="39" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

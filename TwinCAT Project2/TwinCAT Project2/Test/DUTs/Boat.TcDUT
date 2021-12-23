@@ -1,0 +1,21 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.2">
+  <DUT Name="Boat" Id="{5c17310e-571e-42a3-868d-1889b516d493}">
+    <Declaration><![CDATA[//{attribute 'pack_mode' :='1'}
+TYPE Boat :
+STRUCT
+	ID				: LREAL;			//ID
+	CoolTime		: LREAL ;			//冷却时间
+	BoatErrHandle	: LREAL ;			//报警舟处理：0未确认1回炉工艺2到自动化检查
+	UseTimes		: LREAL ;			//使用次数
+	bWaferLoad		: BOOL ;			//装片
+	bJobDone		: BOOL ;			//工艺完成
+	bCool			: BOOL ;			//冷却完成
+	bNeedWash		: BOOL ;			//清洗		
+	bError			: BOOL ;			//报警
+	bReserve		: BOOL ;			//新舟 	
+END_STRUCT
+END_TYPE
+]]></Declaration>
+  </DUT>
+</TcPlcObject>

@@ -1,0 +1,160 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.2">
+  <POU Name="MAIN" Id="{305000b2-9c7d-4ea2-aadb-b6cc50a2dbfb}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM MAIN
+VAR
+	AxisX				:FB_AXIS;
+	Jogtest				:BOOL;
+	bJOGPlus			:BOOL;
+	bpower				:BOOL;
+	ss,ss1				:STRING;
+	var1,var2,var3		:INT;
+	rvar1				:LREAL;
+	iloop				:INT;
+	rlayer				:REAL;
+	bpttest				:BOOL;
+	pttest1				:FB_TP;
+	ptTest				:TP;
+	ptout				:BOOL;
+	ptin				:BOOL;
+	rpttest				:R_TRIG;
+	ttest				:TIME;
+	bGetNetId			:BOOL:=FALSE;
+	NullId				: T_AmsNetID:='0.0.0.0.0.0';
+	bEnableCerDis		: BOOL;
+	NT_StartProcess		: NT_StartProcess;
+	NetId: T_AmsNetID;
+	GetLocalAmsNetId: FB_GetLocalAmsNetId;	
+	CPJ_DataTrans		:FB_RobotCom;
+	PlcTaskSysInfo		: PlcTaskSystemInfo ;			//系统任务信息	
+	ss11:STRING(6);
+	ss12:STRING(1);
+	Out_BoatID:BYTE;
+	W:WORD;
+	mystr:FB_String;
+	i:UINT;
+	StrToSend:STRING;
+	I1:INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[//W:=10;
+//ss:=WORD_TO_HEXSTR(in:= W, iPrecision:= 2, bLoCase:= FALSE);
+//M_PT();
+//Init();
+//M_Axis();
+//CPJ_DataTrans.M_Run();
+//mystr.A_Run();
+//StrToSend:= CONCAT(CONCAT(CONCAT(CONCAT('@0',INT_TO_STRING(I1)),
+//							Chr(16#2)), 'RFV'), Chr(16#3));
+//Out_BoatID:=Tc2_SerialCom.ASC(str:=ss11);
+//mid(ss11,1,1);
+FOR iloop:=1 TO 5 DO
+	iloop:=iloop-1;
+END_FOR
+I1:=ss[iloop];
+iloop:=1;]]></ST>
+    </Implementation>
+    <Action Name="Init" Id="{c0496a07-c758-45c7-b862-7595a2139723}">
+      <Implementation>
+        <ST><![CDATA[IF NOT bGetNetId THEN
+	GetLocalAmsNetId(bExecute:= TRUE, tTimeOut:= T#300MS, AddrString=> NetId);	
+	IF GetLocalAmsNetId.bBusy OR GetLocalAmsNetId.bError OR NetId=NullId THEN
+		GetLocalAmsNetId(bExecute:= FALSE);
+	END_IF
+	IF NOT(NetId= NullId)THEN
+		NT_StartProcess(NETID:= NetId, PATHSTR:='\windows\CerDisp.exe' , 
+					DIRNAME:= '\windows', 	START:= TRUE);
+		bGetNetId:=TRUE;
+	END_IF
+END_IF]]></ST>
+      </Implementation>
+    </Action>
+    <Method Name="M_Axis" Id="{851659c8-7d39-4ccf-9ce4-e6ac6282f81a}">
+      <Declaration><![CDATA[METHOD M_Axis : BOOL
+VAR_INPUT
+	bStartTest:BOOL;
+	
+END_VAR
+VAR
+	iStep:INT;
+	
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[
+AxisX.AxisId:='AxisX';
+AxisX.bPowerCmd:=TRUE;
+
+AxisX.JogAcc:=10;
+AxisX.JogDec:=10;
+AxisX.JogVel:=1;
+AxisX.JogDis:=100;
+AxisX.rHomeBackDis:=-5;
+AxisX.rHomeOffset:=20;
+AxisX.M_Run();
+
+
+CASE iStep OF
+	0:
+		;
+	1:
+	;
+	2:
+	;
+
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_PT" Id="{40645082-c131-47c4-84d9-b822fd9a8b5b}">
+      <Declaration><![CDATA[ METHOD M_PT : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[
+ptTest(IN:= ptin, PT:=T#60S , Q=> ptout, ET=> );
+
+pttest1(Pt:=T#60S , In:=bpttest );
+rpttest(CLK:=pttest1.Out , Q=> );
+IF rpttest.Q THEN
+	var1:=var1+1;
+END_IF
+IF pttest1.Q THEN
+	var2:=var2+1;
+END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="MAIN">
+      <LineId Id="3" Count="7" />
+      <LineId Id="2" Count="0" />
+      <LineId Id="45" Count="1" />
+      <LineId Id="83" Count="0" />
+      <LineId Id="119" Count="1" />
+      <LineId Id="82" Count="0" />
+      <LineId Id="156" Count="0" />
+    </LineIds>
+    <LineIds Name="MAIN.Init">
+      <LineId Id="2" Count="9" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+    <LineIds Name="MAIN.M_Axis">
+      <LineId Id="3" Count="10" />
+      <LineId Id="2" Count="0" />
+      <LineId Id="19" Count="0" />
+      <LineId Id="18" Count="0" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="26" Count="0" />
+      <LineId Id="23" Count="0" />
+      <LineId Id="27" Count="0" />
+      <LineId Id="24" Count="0" />
+      <LineId Id="28" Count="0" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="22" Count="0" />
+    </LineIds>
+    <LineIds Name="MAIN.M_PT">
+      <LineId Id="3" Count="9" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

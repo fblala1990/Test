@@ -1,0 +1,73 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.2">
+  <POU Name="FB_String" Id="{383eefbd-1ac2-4f23-9b4b-480d189d4fed}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_String
+VAR_INPUT
+	S_BoatID	:STRING(6);
+	PE_BoatID:UINT;	
+	RB_BoatID 	:ARRAY[0..6] OF BYTE;
+	TubeIP		:ARRAY[1..5] OF INT;
+END_VAR
+VAR_OUTPUT
+	rbboatid:INT;
+	Tubenetid	:ARRAY[1..5] OF STRING;
+	B_BoatID	:ARRAY[0..6] OF BYTE;
+	 
+END_VAR
+VAR
+	istrLen,iLoop:INT;
+	strout:STRING;
+	PE_BoatIDRB:ARRAY[0..6] OF BYTE;
+	strBoatId:STRING;
+	str:STRING;
+	arrstrId	:ARRAY[1..6] OF STRING;
+	
+	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Action Name="A_Run" Id="{ddf669f7-6eb3-4b2e-b4a5-f4d14576adbe}">
+      <Implementation>
+        <ST><![CDATA[//str2byte
+	strBoatId:=UINT_TO_STRING(PE_BoatID);
+	istrLen:=LEN(strBoatId);
+	FOR iLoop:=0 TO 6 DO
+		PE_BoatIDRB[iLoop]:=0;
+	END_FOR
+	FOR iLoop:=0 TO istrLen DO
+		PE_BoatIDRB[iLoop]:=strBoatId[iLoop];
+	END_FOR
+
+//byte2str
+	strout:='';
+	FOR iLoop:=1 TO 6 DO
+		arrstrId[iLoop]:=BYTE_TO_STRING(PE_BoatIDRB[iLoop]);
+		strout:=CONCAT(strout,arrstrId[iLoop]);			
+	END_FOR
+	rbboatid:=STRING_TO_INT(strout);
+	
+	
+	
+//tubenetid
+	FOR iLoop:=1 TO 5 DO
+		Tubenetid[iloop]:=CONCAT(INT_TO_STRING(TubeIP[1]),'.');
+		Tubenetid[iloop]:=CONCAT(Tubenetid[iloop],CONCAT(INT_TO_STRING(TubeIP[2]),'.'));
+		Tubenetid[iloop]:=CONCAT(Tubenetid[iloop],CONCAT(INT_TO_STRING(TubeIP[3]),'.'));
+		Tubenetid[iloop]:=CONCAT(Tubenetid[iloop],CONCAT(INT_TO_STRING(TubeIP[4]+iloop-1),'.1.1'));
+	END_FOR
+	
+	]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="FB_String">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_String.A_Run">
+      <LineId Id="2" Count="25" />
+      <LineId Id="1" Count="0" />
+      <LineId Id="28" Count="1" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

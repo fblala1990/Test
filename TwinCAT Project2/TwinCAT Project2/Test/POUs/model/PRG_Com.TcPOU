@@ -1,0 +1,28 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.2">
+  <POU Name="PRG_Com" Id="{230547be-281f-45f8-b65d-c19832a9bfb9}" SpecialFunc="None">
+    <Declaration><![CDATA[PROGRAM PRG_Com
+VAR
+	i :INT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="M_Add" Id="{45c06027-5a71-4197-9ae6-90436419f4a7}">
+      <Declaration><![CDATA[METHOD M_Add : BOOL
+VAR_INPUT
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[i:=i+1;]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="PRG_Com">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="PRG_Com.M_Add">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

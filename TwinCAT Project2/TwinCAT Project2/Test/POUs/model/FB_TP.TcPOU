@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.2">
+  <POU Name="FB_TP" Id="{f8d8b1c8-2d6c-4568-80d9-0eceef36025c}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_TP
+VAR_INPUT
+	Pt:TIME;
+	In:BOOL;
+END_VAR
+VAR_OUTPUT
+	Out:BOOL;
+	Q	:BOOL;
+END_VAR
+VAR
+	bfyk	:BOOL;
+	T1,T2	:TON;
+	rOut	:R_TRIG;	
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[IF In THEN
+	T1(IN:=NOT bfyk , PT:= Pt, Q=> , ET=> );
+	IF T1.Q THEN
+		bfyk:=TRUE;
+	END_IF
+	T2(IN:=bfyk , PT:= Pt, Q=> , ET=> );
+	IF T2.Q THEN
+		bfyk:=FALSE;
+	END_IF
+	Out :=bfyk;
+	rOut(CLK:=Out , Q=>Q );
+ELSE
+	Out :=FALSE;
+END_IF
+]]></ST>
+    </Implementation>
+    <LineIds Name="FB_TP">
+      <LineId Id="3" Count="13" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

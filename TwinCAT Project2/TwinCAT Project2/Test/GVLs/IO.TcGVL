@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.2">
+  <GVL Name="IO" Id="{98558c57-be3f-499f-985f-331306e25d20}">
+    <Declaration><![CDATA[{attribute 'qualified_only'}
+VAR_GLOBAL
+	//Axisx_io: Tc2_MC2.AXIS_REF;
+	IoTest 		AT %IB100 		: ARRAY[1..20] OF UINT;
+	IoTest1		AT %QB100 	: ARRAY[1..20] OF UINT;
+END_VAR]]></Declaration>
+  </GVL>
+</TcPlcObject>

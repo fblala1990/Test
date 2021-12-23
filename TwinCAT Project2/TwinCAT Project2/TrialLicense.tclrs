@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<TcLicenseInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.beckhoff.com/schemas/2011/11/TcLicenseInfo">
+	<LicenseInfo>
+		<SystemId>{5D148139-C41B-609A-A13E-B3B7346DC629}</SystemId>
+		<IssueTime>2021-12-16T05:47:00</IssueTime>
+		<ExpireTime>2021-12-24T00:00:00</ExpireTime>
+		<LicenseKey>e10f2020e051e33d820201cfb194cd0e936dc8cd0ad6eba783428899ae773f8617859316df1b845c70f86cf775e8b7700801c900824f59c600aedb061afe2522eeb9159005fecdd5dfe51d6ad85479bbfb2acb1a9ba15d8bacd034f0b01bf1c82768db52a92f5c36d93d126dd519de95b72f71f5d5dc7048fd12223f607803f8757c56b9ef3afcecd5392e7a43990ae125aa6a085eb176de40899d2274dc2f22f6468d918116b09d551951048effae0f090692e5c96c01f0ce744a6270e4905f96712f1b83d775ba7c9218216042c43272e15ab3cb58e603bdb6170dc496ff78ceb14227f4f8b2a8e7b413a499436b0f96a189954d13cd807fe941f55ed0bb31</LicenseKey>
+		<License>
+			<LicenseId>{3EBB9639-5FF3-42B6-8847-35C70DC013C8}</LicenseId>
+			<Name>TC3 TCP/IP</Name>
+			<OrderNo>TF6310</OrderNo>
+		</License>
+	</LicenseInfo>
+</TcLicenseInfo>

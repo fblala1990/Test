@@ -1,0 +1,339 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4020.12">
+  <POU Name="FB_LOTModule" Id="{86490b6d-b286-4d77-8815-c77ddf6c9f23}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_LOTModule
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	StrT: STRING;
+	Timer1, Timer2, Timer3, Timer4: TON;
+	StrToSend: STRING;				//发送数据
+	StrToReceive: STRING;			//读取数据
+	WriteSP1, WriteSP2, WriteSP3, WriteSP4: FB_WriteSP;
+	ReadSP1, ReadSP2, ReadSP3, ReadSP4: FB_ReadSP;
+	I: INT;						//循环用
+	State1, State2, State3, State4: INT;
+	
+	StateQueue: INT;		//触发通讯的顺序隔离
+	Done: BOOL;				//通讯完成一个周期
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="M_GetSetValue" Id="{b14a65c8-e2d9-4d76-914c-1167f51de3f6}">
+      <Declaration><![CDATA[METHOD M_GetSetValue : BOOL
+VAR_INPUT
+	TimeOut: TIME;
+END_VAR
+//开关泵、开清洗 		读模拟传感器（一直读）、读报警（一直读）、读泵状态（一直读）
+//开泵：发：MODW 05<CR> 收：MOD,5<CR><LF>
+//关泵：发：MODW 03<CR> 收：MOD,3<CR><LF>
+//清洗：发：MODW 06<CR>
+
+//读泵模拟传感器：发：RECR<CR> 收：REC R,1,aa.a R,2,bb.b R,3,ccc.c R,4,ee.ee R,5,fff.f R,6,ggg.g R,7,hhh.h<CR><LF>
+//aa.a 马达电流 ccc.c 泵体温度 ee.ee 排气压力 ggg.g N2流量1 hhh.h N2流量2
+//读报警：发：RALR<CR>  收：RAL R,dddddddddddddddd<CR><LF>
+//2：排气压力  6：鼓风机温度 8：马达温度 12和13：N2清洗 15：冷却水
+//读泵状态： 发：MODR<CR>   收：MOD R,dddddddddxxxxxxx<CR><LF>
+//2：Start 3：Stopping
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[CASE StateQueue OF
+	0:
+		Done:= 0;
+		IF Variables_PC.PC_In_Data.bPCPumpOn THEN
+			CASE State1 OF
+				0:
+					StrToSend:= '';
+					StrToSend:= CONCAT('MODW 05', Variables_Constant.CR);
+					StrToReceive:= '';
+					Timer1(IN:= FALSE);
+					WriteSP1(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, StringToSend:= StrToSend);
+					State1:= 1;
+				1:
+					ReadSP1(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, Prefix:= Variables_Para.Para_InOut_Data.LOT_Info.Prefix, Suffix:= Variables_Para.Para_InOut_Data.LOT_Info.Suffix, TimeOut:= TimeOut, StringToReceive => StrToReceive);
+					Timer1(IN:= TRUE, PT:= TimeOut);
+					IF NOT Timer1.Q AND MID(StrToReceive, 3, 1) = 'MOD' THEN							//正常
+						M_GetSetValue:= TRUE;
+						Variables_PC.PC_In_Data.bPCPumpOn:= FALSE;
+						Timer1(IN:= FALSE);
+						State1:= 0;
+						StateQueue:= 10;
+					END_IF
+					IF Timer1.Q THEN																//超时
+						M_GetSetValue:= FALSE;
+						Variables_PC.PC_In_Data.bPCPumpOn:= FALSE;
+						Timer1(IN:= FALSE);
+						State1:= 0;
+						StateQueue:= 10;
+						Variables_PC.PC_Out_Data.PCTips:= CONCAT(Variables_PC.PC_Out_Data.PCStrTime, 'LOT Communication TimeOut');
+					END_IF
+			END_CASE
+		ELSE
+			StateQueue:= 10;
+		END_IF
+	10:
+		IF Variables_PC.PC_In_Data.bPCPumpOff THEN
+			CASE State1 OF
+				0:
+					StrToSend:= '';
+					StrToSend:= CONCAT('MODW 03', Variables_Constant.CR);
+					StrToReceive:= '';
+					Timer1(IN:= FALSE);
+					WriteSP1(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, StringToSend:= StrToSend);
+					State1:= 1;
+				1:
+					ReadSP1(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, Prefix:= Variables_Para.Para_InOut_Data.LOT_Info.Prefix, Suffix:= Variables_Para.Para_InOut_Data.LOT_Info.Suffix, TimeOut:= TimeOut, StringToReceive => StrToReceive);
+					Timer1(IN:= TRUE, PT:= TimeOut);
+					IF NOT Timer1.Q AND MID(StrToReceive, 3, 1) = 'MOD' THEN							//正常
+						M_GetSetValue:= TRUE;
+						Variables_PC.PC_In_Data.bPCPumpOff:= FALSE;
+						Timer1(IN:= FALSE);
+						State1:= 0;
+						StateQueue:= 20;
+					END_IF
+					IF Timer1.Q THEN																//超时
+						M_GetSetValue:= FALSE;
+						Variables_PC.PC_In_Data.bPCPumpOff:= FALSE;
+						Timer1(IN:= FALSE);
+						State1:= 0;
+						StateQueue:= 20;
+						Variables_PC.PC_Out_Data.PCTips:= CONCAT(Variables_PC.PC_Out_Data.PCStrTime, 'LOT Communication TimeOut');
+					END_IF
+			END_CASE
+		ELSE
+			StateQueue:= 20;
+		END_IF
+	20:
+		IF Variables_PC.PC_In_Data.bPCPumpPurOn THEN
+			CASE State1 OF
+				0:
+					StrToSend:= '';
+					StrToSend:= CONCAT('MODW 06', Variables_Constant.CR);
+					StrToReceive:= '';
+					Timer1(IN:= FALSE);
+					WriteSP1(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, StringToSend:= StrToSend);
+					State1:= 1;
+				1:
+					ReadSP1(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, Prefix:= Variables_Para.Para_InOut_Data.LOT_Info.Prefix, Suffix:= Variables_Para.Para_InOut_Data.LOT_Info.Suffix, TimeOut:= TimeOut, StringToReceive => StrToReceive);
+					Timer1(IN:= TRUE, PT:= TimeOut);
+					IF NOT Timer1.Q AND MID(StrToReceive, 3, 1) = 'MOD' THEN							//正常
+						M_GetSetValue:= TRUE;
+						Variables_PC.PC_In_Data.bPCPumpPurOn:= FALSE;
+						Timer1(IN:= FALSE);
+						State1:= 0;
+						StateQueue:= 30;
+					END_IF
+					IF Timer1.Q THEN																//超时
+						M_GetSetValue:= FALSE;
+						Variables_PC.PC_In_Data.bPCPumpPurOn:= FALSE;
+						Timer1(IN:= FALSE);
+						State1:= 0;
+						StateQueue:= 30;
+						Variables_PC.PC_Out_Data.PCTips:= CONCAT(Variables_PC.PC_Out_Data.PCStrTime, 'LOT Communication TimeOut');
+					END_IF
+			END_CASE
+		ELSE
+			StateQueue:= 30;
+		END_IF
+	30:
+		//读模拟传感器
+		CASE State2 OF
+			0:
+				StrToSend:= '';
+				StrToSend:= CONCAT('RECR', Variables_Constant.CR);
+				StrToReceive:= '';
+				Timer2(IN:= FALSE);
+				WriteSP2(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, StringToSend:= StrToSend);
+				State2:= 1;
+			1:
+				ReadSP2(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, Prefix:= Variables_Para.Para_InOut_Data.LOT_Info.Prefix, Suffix:= Variables_Para.Para_InOut_Data.LOT_Info.Suffix, TimeOut:= TimeOut, StringToReceive => StrToReceive);
+				Timer2(IN:= TRUE, PT:= TimeOut);
+				IF NOT Timer2.Q AND MID(StrToReceive, 3, 1) = 'REC' THEN							//正常
+					M_GetSetValue:= TRUE;
+					Timer2(IN:= FALSE);
+					Variables_PC.PC_Out_Data.PCPumpPower:= STRING_TO_REAL(MID(StrToReceive, 4, 9));  //11
+					Variables_PC.PC_Out_Data.PCPumpN2Flow:= STRING_TO_REAL(MID(StrToReceive, 4, 57));  //59
+					Variables_PC.PC_Out_Data.PCPumpADPTemp:= STRING_TO_REAL(MID(StrToReceive, 4, 27));  //29
+					Variables_PC.PC_Out_Data.PCPumpOutPress:= STRING_TO_REAL(MID(StrToReceive, 4, 37));  //39
+					State2:= 0;
+					StateQueue:= 40;
+				END_IF
+				IF Timer2.Q THEN														//超时
+					M_GetSetValue:= FALSE;
+					Timer2(IN:= FALSE);
+					Variables_PC.PC_Out_Data.PCPumpPower:= 0;
+					Variables_PC.PC_Out_Data.PCPumpN2Flow:= 0;
+					Variables_PC.PC_Out_Data.PCPumpADPTemp:= 0;
+					Variables_PC.PC_Out_Data.PCPumpOutPress:= 0;
+					State2:= 0;
+					StateQueue:= 40;
+					Variables_PC.PC_Out_Data.PCTips:= CONCAT(Variables_PC.PC_Out_Data.PCStrTime, 'LOT Communication TimeOut');
+				END_IF
+		END_CASE
+	40:
+		//读报警
+		CASE State3 OF
+			0:
+				StrToSend:= '';
+				StrToSend:= CONCAT('RALR', Variables_Constant.CR);
+				StrToReceive:= '';
+				Timer3(IN:= FALSE);
+				WriteSP3(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, StringToSend:= StrToSend);
+				State3:= 1;
+			1:
+				ReadSP3(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, Prefix:= Variables_Para.Para_InOut_Data.LOT_Info.Prefix, Suffix:= Variables_Para.Para_InOut_Data.LOT_Info.Suffix, TimeOut:= TimeOut, StringToReceive => StrToReceive);
+				Timer3(IN:= TRUE, PT:= TimeOut);
+				IF NOT Timer3.Q AND MID(StrToReceive, 3, 1) = 'RAL' THEN							//正常
+					M_GetSetValue:= TRUE;
+					Timer3(IN:= FALSE);
+					IF MID(StrToReceive, 1, 21) = '1' THEN	//冷却水  //23
+						Variables_PC.PC_Out_Data.bPCPumpWaterFault2:= TRUE;
+					ELSE
+						Variables_PC.PC_Out_Data.bPCPumpWaterFault2:= FALSE;
+					END_IF
+					IF MID(StrToReceive, 1, 14) = '1' THEN	//马达温度  //16
+						Variables_PC.PC_Out_Data.bPCPumpMotorFault2:= TRUE;
+					ELSE
+						Variables_PC.PC_Out_Data.bPCPumpMotorFault2:= FALSE;
+					END_IF
+					IF MID(StrToReceive, 1, 8) = '1' THEN	//排气压力  //10
+						Variables_PC.PC_Out_Data.bPCPumpPressFault2:= TRUE;
+					ELSE
+						Variables_PC.PC_Out_Data.bPCPumpPressFault2:= FALSE;
+					END_IF
+					IF MID(StrToReceive, 1, 18) = '1' OR MID(StrToReceive, 1, 21) = '1'THEN  //N2清洗  //20
+						Variables_PC.PC_Out_Data.bPCPumpN2PurgeFault2:= TRUE;
+					ELSE
+						Variables_PC.PC_Out_Data.bPCPumpN2PurgeFault2:= FALSE;
+					END_IF
+					IF MID(StrToReceive, 1, 12) = '1' THEN	//鼓风机温度  //14
+						Variables_PC.PC_Out_Data.bPCPumpADPTempFault2:= TRUE;
+					ELSE
+						Variables_PC.PC_Out_Data.bPCPumpADPTempFault2:= FALSE;
+					END_IF
+					State3:= 0;
+					StateQueue:= 50;
+				END_IF
+				IF Timer3.Q THEN														//超时
+					M_GetSetValue:= FALSE;
+					Timer3(IN:= FALSE);
+					Variables_PC.PC_Out_Data.bPCPumpWaterFault2:= 0;
+					Variables_PC.PC_Out_Data.bPCPumpMotorFault2:= 0;
+					Variables_PC.PC_Out_Data.bPCPumpPressFault2:= 0;
+					Variables_PC.PC_Out_Data.bPCPumpN2PurgeFault2:= 0;
+					Variables_PC.PC_Out_Data.bPCPumpADPTempFault2:= 0;
+					State3:= 0;
+					StateQueue:= 50;
+					Variables_PC.PC_Out_Data.PCTips:= CONCAT(Variables_PC.PC_Out_Data.PCStrTime, 'LOT Communication TimeOut');
+				END_IF
+		END_CASE
+	50:
+		//读泵状态
+		//发MODR<CR> 收MODR<SP>R,100000000xxxxxxx<CR><LF>
+		CASE State4 OF
+			0:
+				StrToSend:= '';
+				StrToSend:= CONCAT('MODR', Variables_Constant.CR);
+				StrToReceive:= '';
+				Timer4(IN:= FALSE);
+				WriteSP4(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, StringToSend:= StrToSend);
+				State4:= 1;
+			1:
+				ReadSP4(ComObj:= Variables_Para.Para_InOut_Data.LOT_Info.ComObj, StringOrData:= Variables_Para.Para_InOut_Data.LOT_Info.StringOrData, Prefix:= Variables_Para.Para_InOut_Data.LOT_Info.Prefix, Suffix:= Variables_Para.Para_InOut_Data.LOT_Info.Suffix, TimeOut:= TimeOut, StringToReceive => StrToReceive);
+				Timer4(IN:= TRUE, PT:= TimeOut);
+				IF NOT Timer4.Q AND MID(StrToReceive, 3, 1) = 'MOD' THEN							//正常
+					M_GetSetValue:= TRUE;
+					Timer4(IN:= FALSE);
+					IF MID(StrToReceive, 1, 8) = '1' THEN	//开始  //10
+						Variables_PC.PC_Out_Data.bPCPumpOnOff:= TRUE;
+					ELSE
+						Variables_PC.PC_Out_Data.bPCPumpOnOff:= FALSE;
+					END_IF
+					IF MID(StrToReceive, 1, 9) = '1' THEN	//停止  //11
+						Variables_PC.PC_Out_Data.bPCPumpOnOff:= FALSE;
+					END_IF
+					State4:= 0;
+					StateQueue:= 0;
+					Done:= 1;
+				END_IF
+				IF Timer4.Q THEN														//超时
+					M_GetSetValue:= FALSE;
+					Timer4(IN:= FALSE);
+					Variables_PC.PC_Out_Data.bPCPumpOnOff:= 0;
+					State4:= 0;
+					StateQueue:= 0;
+					Done:= 1;
+					Variables_PC.PC_Out_Data.PCTips:= CONCAT(Variables_PC.PC_Out_Data.PCStrTime, 'LOT Communication TimeOut');
+				END_IF
+		END_CASE
+END_CASE]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="FB_LOTModule">
+      <LineId Id="9" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_LOTModule.M_GetSetValue">
+      <LineId Id="20" Count="0" />
+      <LineId Id="22" Count="2" />
+      <LineId Id="26" Count="1" />
+      <LineId Id="58" Count="0" />
+      <LineId Id="30" Count="24" />
+      <LineId Id="25" Count="0" />
+      <LineId Id="55" Count="1" />
+      <LineId Id="59" Count="3" />
+      <LineId Id="90" Count="0" />
+      <LineId Id="65" Count="24" />
+      <LineId Id="91" Count="5" />
+      <LineId Id="123" Count="0" />
+      <LineId Id="98" Count="24" />
+      <LineId Id="124" Count="2" />
+      <LineId Id="128" Count="11" />
+      <LineId Id="141" Count="0" />
+      <LineId Id="156" Count="0" />
+      <LineId Id="159" Count="2" />
+      <LineId Id="142" Count="4" />
+      <LineId Id="148" Count="0" />
+      <LineId Id="162" Count="3" />
+      <LineId Id="149" Count="4" />
+      <LineId Id="166" Count="0" />
+      <LineId Id="168" Count="14" />
+      <LineId Id="220" Count="0" />
+      <LineId Id="183" Count="0" />
+      <LineId Id="228" Count="0" />
+      <LineId Id="230" Count="0" />
+      <LineId Id="229" Count="0" />
+      <LineId Id="231" Count="0" />
+      <LineId Id="216" Count="0" />
+      <LineId Id="232" Count="2" />
+      <LineId Id="224" Count="0" />
+      <LineId Id="217" Count="0" />
+      <LineId Id="235" Count="3" />
+      <LineId Id="218" Count="0" />
+      <LineId Id="239" Count="2" />
+      <LineId Id="222" Count="0" />
+      <LineId Id="219" Count="0" />
+      <LineId Id="242" Count="2" />
+      <LineId Id="187" Count="5" />
+      <LineId Id="210" Count="4" />
+      <LineId Id="197" Count="4" />
+      <LineId Id="245" Count="0" />
+      <LineId Id="247" Count="0" />
+      <LineId Id="333" Count="0" />
+      <LineId Id="248" Count="14" />
+      <LineId Id="309" Count="5" />
+      <LineId Id="317" Count="0" />
+      <LineId Id="287" Count="1" />
+      <LineId Id="308" Count="0" />
+      <LineId Id="289" Count="4" />
+      <LineId Id="298" Count="1" />
+      <LineId Id="307" Count="0" />
+      <LineId Id="300" Count="2" />
+      <LineId Id="21" Count="0" />
+      <LineId Id="5" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

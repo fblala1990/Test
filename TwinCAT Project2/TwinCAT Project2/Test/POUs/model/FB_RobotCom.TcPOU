@@ -1,0 +1,243 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.2">
+  <POU Name="FB_RobotCom" Id="{4759786f-a61a-494a-8827-14279b7ad730}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_RobotCom
+(*
+	插片机通讯 模块
+	1.作为服务器
+	2.客户端——二所
+	3.客户端-江松
+*)
+VAR_INPUT
+	bReconnectCmd		:BOOL;	
+	PEData				:ARRAY[1..30] OF UINT;		//写入的PE数据
+	iServer				:INT;	
+END_VAR
+VAR_OUTPUT
+	bError				:ARRAY[1..10] OF BOOL;		//1:连接错误，2读写错误或者超时
+	RobotData			:ARRAY[1..30] OF UINT;		//读出的JS数据
+	bConnected			:BOOL;						//通讯正常
+END_VAR
+VAR
+	DataNull			:ARRAY[1..30] OF UINT;		//0
+//1.AS Server	
+
+
+//AS Client
+//公用	
+	tcpconnect			:FB_SocketConnect;			//
+    tcpclose			:FB_SocketClose;			//
+    tcpcloseall			:FB_SocketCloseAll;			//
+	tcpsend				:FB_SocketSend;				//
+    tcpreceive			:FB_SocketReceive;			//
+	hSocket				:T_HSOCKET;
+	
+	close_do			:BOOL;						//
+	closeall_do			:BOOL;   					//
+	connect_do			:BOOL:=TRUE;	
+	Connect_error		:BOOL;	
+	bsenderror			:BOOL;
+	breceiveerror		:BOOL;
+	bsendbusy			:BOOL;
+	brecvbusy			:BOOL;
+	
+	tReadWriteErr		:TON;
+	bReadWriteErr		:BOOL;
+	tReadWriteOK		:TON;
+	bReadWriteOK		:BOOL;
+	
+	tConnected			:TON;
+	tCon_ErrorConfirm	:TON;
+	tConnect_error		:TON;
+	tConnect_error1		:TON;
+	rReconnect			:R_TRIG;	
+	ServerIp			:STRING;
+	iPort				:UDINT;
+
+	iReconStep			:INT;
+	tRecon				:ARRAY[0..2] OF TON;
+
+	
+
+	
+//robo-tec 
+	iRunStepRT			:INT;
+		
+	arrSendDataRT		:ARRAY[1..30] OF BYTE;
+	arrRecieveDataRT	:ARRAY[1..30] OF BYTE;
+	tStepRT				:ARRAY[0..1] OF TON;	
+	iSendTimes			:INT;	
+
+	//robo-tec 11
+	iRunStepRT1			:INT;
+		
+	arrSendDataRT1		:STRING(20);
+	arrRecieveDataRT1	:STRING(20);
+	tStepRT1			:ARRAY[0..1] OF TON;	
+	iSendTimes1			:INT;	
+//JS ADS
+
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="M_Connect" Id="{a8f50266-f39d-4419-aa65-98ccbc57aa5c}">
+      <Declaration><![CDATA[METHOD M_Connect : BOOL
+VAR
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[//connnect
+	tcpconnect(sSrvNetId:='' ,	sRemoteHost:=ServerIp ,nRemotePort:=iPort,
+		bExecute:=connect_do ,	tTimeout:=T#5S ,bError=>Connect_error );
+	//连续10s无连接错误认为连接成功	
+	tConnected(IN:= NOT Connect_error, PT:=T#10S , Q=>bConnected , ET=> );
+	bError[1]:=NOT bConnected;
+//recoonect	读写错误或连接错误时，自动重连
+	IF NOT bReconnectCmd THEN
+		tConnect_error(IN:= Connect_error OR NOT bReadWriteOK,PT:=T#60S);
+	END_IF	
+	rReconnect(CLK:=tConnect_error.Q , Q=> );	
+	IF rReconnect.Q THEN
+		bReconnectCmd:=TRUE;
+	END_IF
+	
+	IF bReconnectCmd THEN
+		CASE iReconStep OF
+			0:
+				connect_do:=FALSE;
+				tcpCloseAll(sSrvNetId:= ,bExecute:=TRUE );			
+				tRecon[0](IN:=TRUE , PT:=T#1S , Q=> , ET=> );				
+				IF tRecon[0].Q THEN
+					iReconStep:=1;
+					tRecon[0](IN:=FALSE);
+					tcpCloseAll(sSrvNetId:= ,bExecute:=FALSE );
+				END_IF
+			1:
+				connect_do:=TRUE;							
+				tRecon[1](IN:=TRUE , PT:=T#1S , Q=> , ET=> );	
+				IF tRecon[1].Q THEN
+					iReconStep:=0;
+					tRecon[1](IN:=FALSE);
+					tConnect_error(IN:= FALSE);
+					bReconnectCmd:=FALSE;
+				END_IF
+		END_CASE
+	END_IF]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_DataMake" Id="{621e0285-2dc4-4484-85f3-b23d2059ea9e}">
+      <Declaration><![CDATA[METHOD M_DataMake : BOOL
+VAR
+	iloop:INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[arrSendDataRT1:='';
+FOR iloop:=1 TO 30 DO
+	//arrSendDataRT1:=arrSendDataRT1+BOOL_TO_STRING(UINT_TO_BOOL(PEData[iloop]));
+	//arrSendDataRT1:=CONCAT(arrSendDataRT1,UINT_TO_STRING(PEData[iloop]));
+	arrSendDataRT[iloop]:=UINT_TO_BYTE(PEData[iloop]);
+END_FOR
+]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_RT1_DataTrans" Id="{1810c32f-c9e3-4c40-9ab4-7dff65b67c89}">
+      <Declaration><![CDATA[METHOD M_RT1_DataTrans : BOOL
+VAR
+	iLoop:INT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[//循环读写过程	
+	CASE iRunStepRT1 OF 	
+		0://发送数据
+			M_DataMake();	
+				
+			IF 	iSendTimes=0 THEN	
+				tcpSend(sSrvNetId:='' ,
+						hSocket:=tcpconnect.hSocket,
+						cbLen:= SIZEOF(arrSendDataRT),
+						pSrc:=ADR(arrSendDataRT),
+						bExecute:= TRUE,
+						tTimeout:=T#5S,
+						bError=>bsenderror,
+						bBusy=>bsendbusy);
+			END_IF
+			tStepRT1[0](IN:=TRUE,PT:=T#120MS);
+			IF tStepRT1[0].Q THEN							
+				iRunStepRT1:=1;
+				tcpSend(hSocket:=tcpconnect.hSocket,bExecute:=FALSE);
+				tStepRT1[0](IN:=FALSE );
+				iSendTimes1:=iSendTimes1+1;
+				IF iSendTimes1=6 THEN
+					iSendTimes1:=0;
+				END_IF
+			END_IF				
+		1://接收数据					
+			tcpReceive(sSrvNetId:='',
+					   hSocket:=tcpconnect.hSocket,
+					   cbLen:=SIZEOF(arrRecieveDataRT),
+					   pDest:=ADR(arrRecieveDataRT),
+					   bExecute:=TRUE,
+					   tTimeout:=T#5S,
+					   bError=>breceiveerror,
+					   bBusy=>brecvbusy);
+			tStepRT1[1](IN:=TRUE,PT:= T#120MS);
+			IF tStepRT1[1].Q THEN											
+				tStepRT[1](IN:=FALSE );
+				tcpreceive(hSocket:=tcpconnect.hSocket,bExecute:=FALSE);
+				iRunStepRT1:=0;
+			END_IF		
+	END_CASE
+
+	tReadWriteErr(IN:=bsenderror OR bsendbusy OR breceiveerror OR brecvbusy OR bError[2],
+				  PT:=T#0.5S , Q=>bReadWriteErr);
+	tReadWriteOK(IN:=NOT bReadWriteErr , PT:=T#10S , Q=>bReadWriteOK , ET=> );
+	]]></ST>
+      </Implementation>
+    </Method>
+    <Method Name="M_Run" Id="{db67475e-67c5-4088-ad02-602bdbd01f90}">
+      <Declaration><![CDATA[METHOD M_Run : BOOL
+
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[IF iServer=0 THEN		
+		iPort:=8501;
+		ServerIp:='192.168.1.12';
+		M_Connect();
+		IF NOT Connect_error THEN	
+			M_RT1_DataTrans();
+			IF bReadWriteErr THEN
+				RobotData:=DataNull;
+			END_IF		
+		ELSE
+			RobotData:=DataNull;	
+		END_IF
+	END_IF
+
+]]></ST>
+      </Implementation>
+    </Method>
+    <LineIds Name="FB_RobotCom">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_RobotCom.M_Connect">
+      <LineId Id="3" Count="35" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_RobotCom.M_DataMake">
+      <LineId Id="3" Count="5" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_RobotCom.M_RT1_DataTrans">
+      <LineId Id="3" Count="44" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_RobotCom.M_Run">
+      <LineId Id="3" Count="13" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

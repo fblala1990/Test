@@ -1,0 +1,60 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.2">
+  <POU Name="FB_Object" Id="{70c817b1-e61c-405f-8420-4660f29a259c}" SpecialFunc="None">
+    <Declaration><![CDATA[FUNCTION_BLOCK FB_Object
+VAR_INPUT
+END_VAR
+VAR_OUTPUT
+END_VAR
+VAR
+	iMem:UINT;
+END_VAR
+]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[]]></ST>
+    </Implementation>
+    <Method Name="M_Add" Id="{986fa425-7676-40fd-8946-3e70a8c7dfc5}">
+      <Declaration><![CDATA[METHOD PUBLIC M_Add : UINT
+VAR_INPUT
+	iVal:UINT;
+END_VAR
+]]></Declaration>
+      <Implementation>
+        <ST><![CDATA[iMem:=iMem+iVal;
+M_Add:=iMem;]]></ST>
+      </Implementation>
+    </Method>
+    <Property Name="P_Memory" Id="{d36105d0-f554-45c5-84cf-081f7f04df7f}">
+      <Declaration><![CDATA[PROPERTY PUBLIC P_Memory : uint]]></Declaration>
+      <Get Name="Get" Id="{78e6aa4b-0dcf-46a5-95f2-d65bdd885daa}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[P_Memory:=iMem;]]></ST>
+        </Implementation>
+      </Get>
+      <Set Name="Set" Id="{51784b65-e8f8-40aa-8cf8-9aeb1a4b137e}">
+        <Declaration><![CDATA[VAR
+END_VAR
+]]></Declaration>
+        <Implementation>
+          <ST><![CDATA[iMem:=P_Memory;]]></ST>
+        </Implementation>
+      </Set>
+    </Property>
+    <LineIds Name="FB_Object">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Object.M_Add">
+      <LineId Id="3" Count="0" />
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Object.P_Memory.Get">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+    <LineIds Name="FB_Object.P_Memory.Set">
+      <LineId Id="2" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>

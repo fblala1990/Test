@@ -47,8 +47,8 @@ END_VAR
 //mystr.A_Run();
 //StrToSend:= CONCAT(CONCAT(CONCAT(CONCAT('@0',INT_TO_STRING(I1)),
 //							Chr(16#2)), 'RFV'), Chr(16#3));
-//Out_BoatID:=Tc2_SerialCom.ASC(str:=ss11);
-//mid(ss11,1,1);
+Out_BoatID:=Tc2_SerialCom.ASC(str:=ss11);
+mid(ss11,1,1);
 
 I1:=ss[iloop];
 //shenddddddd
